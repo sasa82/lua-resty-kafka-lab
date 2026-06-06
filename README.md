@@ -107,6 +107,7 @@ Script will automatically:
 | --domain | resty-kafka.loadtest.rnd | Domain name for OpenResty server |
 | --lib | patched | Library to use: patched or original |
 | --kafka | kraft | Kafka type: kraft or zk |
+| --topic | test-topic | Kafka topic name |
 | --sync-pool-size | 5 | Number of sync producers per worker |
 | --sync-lock-timeout | 30 | Lock timeout in seconds |
 | --async-batch-num | 5000 | Async batch size |
@@ -118,6 +119,7 @@ Script will automatically:
         --domain resty-kafka.loadtest.rnd \
         --lib patched \
         --kafka kraft \
+        --topic test-topic \
         --sync-pool-size 5 \
         --sync-lock-timeout 30 \
         --async-batch-num 5000 \
