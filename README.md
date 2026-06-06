@@ -69,6 +69,41 @@ Script will automatically:
 - Switch broker port (9093 KRaft / 9092 ZooKeeper)
 - Reload OpenResty
 
+### Compatibility Testing
+
+Compatibility matrix script tests all Kafka versions automatically.
+Must be run on OpenResty server after setup is complete.
+
+#### Prerequisites
+- `setup_openresty.sh` must be run first
+- Both ZooKeeper and KRaft containers defined in docker-compose.yml
+- OpenResty must be running
+
+#### Usage
+
+    ## Test with patched library (default)
+    ./scripts/setup_openresty.sh --openresty-server-private-ip 10.0.1.1 --lib patched
+    ./scripts/compatibility_test.sh
+
+    ## Test with original library
+    ./scripts/setup_openresty.sh --openresty-server-private-ip 10.0.1.1 --lib original
+    ./scripts/compatibility_test.sh
+
+#### What it does
+- Tests ZooKeeper Kafka versions: 7.0.0, 7.2.0, 7.4.0, 7.5.0, 7.6.0
+- Tests KRaft Kafka versions: 3.7.0, 3.8.0, 3.9.0, 4.0.0, 4.1.0, 4.2.0
+- Tests both sync and async producers for each version
+- Verifies messages actually land in Kafka via offset check
+- Captures Kafka and OpenResty logs on failure
+- Saves results to timestamped log file
+
+#### Results
+Results are saved to:
+    compatibility_results_YYYYMMDD_HHMMSS.log
+
+See [results/compatibility_matrix.md](results/compatibility_matrix.md) for our test results.
+
+
 ### Repository Structure
 
     lua-resty-kafka-lab/
