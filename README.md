@@ -9,6 +9,12 @@ This repo contains:
 - 🔬 Compatibility matrix testing across Kafka versions
 - 📊 Benchmark results and compatibility matrix
 
+#### About the patched fork
+- Original library: [lua-resty-kafka](https://github.com/doujiang24/lua-resty-kafka)
+- Patched fork: [lua-resty-kafka-patched](https://github.com/sasa82/lua-resty-kafka) 
+- Key improvement: adds Produce API v3+ support enabling KRaft Kafka 4.0+ compatibility
+- Zero regressions on all previously supported Kafka versions
+
 ### Requirements
 
 #### OpenResty Server
