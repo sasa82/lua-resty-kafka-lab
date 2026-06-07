@@ -19,9 +19,18 @@ This repo contains:
 
 #### OpenResty Server
 - Ubuntu 20.04+
-- OpenResty 1.x
-- Docker + Docker Compose
 - Private network IP (e.g. 10.0.1.1)
+
+> OpenResty, Docker and all dependencies are installed automatically by setup_openresty.sh
+
+#### Dependencies installed automatically
+- `openresty` - nginx based platform for Lua
+- `docker` - container runtime for Kafka
+- `git` - for cloning kafka libraries
+- `curl` - for downloading packages
+- `libext2fs-dev` - required for FFI CRC32C acceleration
+  - Without it pure Lua CRC32C is used (slower for messages > 50KB)
+  - See [results/benchmark_results.md](results/benchmark_results.md) for performance comparison
 
 #### JMeter Server
 - Ubuntu 20.04+
