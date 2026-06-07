@@ -97,6 +97,8 @@ fi
 echo "Installing dependencies..."
 apt-get install -y \
     e2fsprogs \
+    curl \
+    git \
     e2fsck-static \
     libext2fs-dev
 
