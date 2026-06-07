@@ -115,7 +115,7 @@ See [results/compatibility_matrix.md](results/compatibility_matrix.md) for our t
 
 ### Repository Structure
 
-    lua-resty-kafka-lab/
+        lua-resty-kafka-lab/
     ├── README.md
     ├── docker/
     │   └── docker-compose.yml
@@ -131,11 +131,23 @@ See [results/compatibility_matrix.md](results/compatibility_matrix.md) for our t
     │       └── producer_async.lua
     ├── lib/
     │   └── kafka_producers.lua
-    ├── bzt/
-    │   └── *.yml
+    ├── jmeter/
+    │   ├── README.md
+    │   ├── bzt/
+    │   │   ├── config.yml
+    │   │   ├── loadtest-sync.yml
+    │   │   ├── loadtest-async.yml
+    │   │   ├── loadtest-sync-1kb.yml
+    │   │   ├── loadtest-sync-10kb.yml
+    │   │   ├── loadtest-sync-100kb.yml
+    │   │   └── payloads/
+    │   │       ├── payload_1kb.txt
+    │   │       ├── payload_10kb.txt
+    │   │       └── payload_100kb.txt
+    │   └── scripts/
+    │       └── setup_jmeter.sh
     ├── scripts/
     │   ├── setup_openresty.sh
-    │   ├── setup_jmeter.sh
     │   └── compatibility_test.sh
     └── results/
         ├── compatibility_matrix.md
