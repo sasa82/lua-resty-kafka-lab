@@ -59,16 +59,52 @@ else
 fi
 
 ## ==========================================
-## Set lua_package_path based on lib
+## Set lib paths based on lib parameter
 ## ==========================================
 if [ "$LIB" == "patched" ]; then
-    LUA_PACKAGE_PATH="/usr/local/openresty/lualib/lua-resty-kafka-patched/lib/?.lua;;"
+    KAFKA_LIB="lua-resty-kafka-patched"
 elif [ "$LIB" == "original" ]; then
-    LUA_PACKAGE_PATH="/usr/local/openresty/lualib/lua-resty-kafka/lib/?.lua;;"
+    KAFKA_LIB="lua-resty-kafka"
 else
     echo "ERROR: --lib must be patched or original"
     exit 1
 fi
+
+## ==========================================
+## Check/Install OpenResty
+## ==========================================
+if command -v openresty &> /dev/null; then
+    OPENRESTY_DIR=$(dirname $(dirname $(which openresty)))
+    echo "OpenResty found at: $OPENRESTY_DIR"
+else
+    echo "OpenResty not found, installing..."
+    apt-get update
+    apt-get install -y lsb-release
+
+    wget -O - https://openresty.org/package/pubkey.gpg | apt-key add -
+    echo "deb http://openresty.org/package/ubuntu $(lsb_release -sc) main" \
+        > /etc/apt/sources.list.d/openresty.list
+    apt-get update
+    apt-get install -y openresty
+
+    OPENRESTY_DIR=$(dirname $(dirname $(which openresty)))
+    echo "OpenResty installed at: $OPENRESTY_DIR"
+fi
+
+## ==========================================
+## Install dependencies
+## ==========================================
+echo "Installing dependencies..."
+apt-get install -y \
+    e2fsprogs \
+    e2fsck-static \
+    libext2fs-dev
+
+## ==========================================
+## Set lib paths using OPENRESTY_DIR
+## ==========================================
+KAFKA_LIB_PATH="$OPENRESTY_DIR/lualib/$KAFKA_LIB/lib/?.lua"
+LAB_LIB_PATH="$OPENRESTY_DIR/lualib/lua-resty-kafka-lab/lib/?.lua"
 
 echo "======================================="
 echo "lua-resty-kafka-lab OpenResty Setup"
@@ -83,6 +119,9 @@ echo "Sync pool size:    $SYNC_POOL_SIZE"
 echo "Sync lock timeout: $SYNC_LOCK_TIMEOUT"
 echo "Async batch num:   $ASYNC_BATCH_NUM"
 echo "Async flush time:  $ASYNC_FLUSH_TIME"
+echo "OpenResty dir:     $OPENRESTY_DIR"
+echo "Kafka lib path:    $KAFKA_LIB_PATH"
+echo "Lab lib path:      $LAB_LIB_PATH"
 echo "======================================="
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -101,18 +140,18 @@ fi
 ## ==========================================
 ## Clone kafka libraries if not present
 ## ==========================================
-mkdir -p /usr/local/openresty/lualib
+mkdir -p "$OPENRESTY_DIR/lualib"
 
-if [ ! -d "/usr/local/openresty/lualib/lua-resty-kafka" ]; then
+if [ ! -d "$OPENRESTY_DIR/lualib/lua-resty-kafka" ]; then
     echo "Cloning original lua-resty-kafka..."
     git clone https://github.com/doujiang24/lua-resty-kafka.git \
-        /usr/local/openresty/lualib/lua-resty-kafka
+        "$OPENRESTY_DIR/lualib/lua-resty-kafka"
 fi
 
-if [ ! -d "/usr/local/openresty/lualib/lua-resty-kafka-patched" ]; then
+if [ ! -d "$OPENRESTY_DIR/lualib/lua-resty-kafka-patched" ]; then
     echo "Cloning patched lua-resty-kafka..."
     git clone https://github.com/sasa82/lua-resty-kafka.git \
-        /usr/local/openresty/lualib/lua-resty-kafka-patched
+        "$OPENRESTY_DIR/lualib/lua-resty-kafka-patched"
 fi
 
 ## ==========================================
@@ -120,23 +159,23 @@ fi
 ## ==========================================
 echo "Copying nginx configs..."
 cp "$REPO_DIR/openresty/nginx/conf/nginx.conf" \
-    /usr/local/openresty/nginx/conf/nginx.conf
+    "$OPENRESTY_DIR/nginx/conf/nginx.conf"
 
-mkdir -p /usr/local/openresty/nginx/conf/conf.d
+mkdir -p "$OPENRESTY_DIR/nginx/conf/conf.d"
 cp "$REPO_DIR/openresty/nginx/conf/conf.d/kafka-loadtest.conf" \
-    /usr/local/openresty/nginx/conf/conf.d/kafka-loadtest.conf
+    "$OPENRESTY_DIR/nginx/conf/conf.d/kafka-loadtest.conf"
 
-mkdir -p /usr/local/openresty/luaconfigs
+mkdir -p "$OPENRESTY_DIR/luaconfigs"
 cp "$REPO_DIR/openresty/luaconfigs/init.lua" \
-    /usr/local/openresty/luaconfigs/init.lua
+    "$OPENRESTY_DIR/luaconfigs/init.lua"
 cp "$REPO_DIR/openresty/luaconfigs/producer_sync.lua" \
-    /usr/local/openresty/luaconfigs/producer_sync.lua
+    "$OPENRESTY_DIR/luaconfigs/producer_sync.lua"
 cp "$REPO_DIR/openresty/luaconfigs/producer_async.lua" \
-    /usr/local/openresty/luaconfigs/producer_async.lua
+    "$OPENRESTY_DIR/luaconfigs/producer_async.lua"
 
-mkdir -p /usr/local/openresty/lualib/lua-resty-kafka-lab/lib
+mkdir -p "$OPENRESTY_DIR/lualib/lua-resty-kafka-lab/lib"
 cp "$REPO_DIR/lib/kafka_producers.lua" \
-    /usr/local/openresty/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua
+    "$OPENRESTY_DIR/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua"
 
 ## ==========================================
 ## Replace placeholders in configs
@@ -144,28 +183,34 @@ cp "$REPO_DIR/lib/kafka_producers.lua" \
 echo "Configuring placeholders..."
 
 ## nginx.conf
-sed -i "s|LUA_PACKAGE_PATH|$LUA_PACKAGE_PATH|g" \
-    /usr/local/openresty/nginx/conf/nginx.conf
+sed -i "s|KAFKA_LIB_PATH|$KAFKA_LIB_PATH|g" \
+    "$OPENRESTY_DIR/nginx/conf/nginx.conf"
+sed -i "s|LAB_LIB_PATH|$LAB_LIB_PATH|g" \
+    "$OPENRESTY_DIR/nginx/conf/nginx.conf"
+sed -i "s|OPENRESTY_DIR|$OPENRESTY_DIR|g" \
+    "$OPENRESTY_DIR/nginx/conf/nginx.conf"
 
 ## kafka-loadtest.conf
 sed -i "s|DOMAIN_NAME|$DOMAIN|g" \
-    /usr/local/openresty/nginx/conf/conf.d/kafka-loadtest.conf
+    "$OPENRESTY_DIR/nginx/conf/conf.d/kafka-loadtest.conf"
 sed -i "s|KAFKA_TOPIC|$TOPIC|g" \
-    /usr/local/openresty/nginx/conf/conf.d/kafka-loadtest.conf
+    "$OPENRESTY_DIR/nginx/conf/conf.d/kafka-loadtest.conf"
+sed -i "s|OPENRESTY_DIR|$OPENRESTY_DIR|g" \
+    "$OPENRESTY_DIR/nginx/conf/conf.d/kafka-loadtest.conf"
 
 ## kafka_producers.lua
 sed -i "s|BROKER_IP|$OPENRESTY_IP|g" \
-    /usr/local/openresty/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua
+    "$OPENRESTY_DIR/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua"
 sed -i "s|BROKER_PORT|$BROKER_PORT|g" \
-    /usr/local/openresty/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua
+    "$OPENRESTY_DIR/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua"
 sed -i "s|SYNC_POOL_SIZE|$SYNC_POOL_SIZE|g" \
-    /usr/local/openresty/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua
+    "$OPENRESTY_DIR/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua"
 sed -i "s|SYNC_LOCK_TIMEOUT|$SYNC_LOCK_TIMEOUT|g" \
-    /usr/local/openresty/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua
+    "$OPENRESTY_DIR/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua"
 sed -i "s|ASYNC_BATCH_NUM|$ASYNC_BATCH_NUM|g" \
-    /usr/local/openresty/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua
+    "$OPENRESTY_DIR/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua"
 sed -i "s|ASYNC_FLUSH_TIME|$ASYNC_FLUSH_TIME|g" \
-    /usr/local/openresty/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua
+    "$OPENRESTY_DIR/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua"
 
 ## compatibility_test.sh
 sed -i "s|DOMAIN_NAME|$DOMAIN|g" \
