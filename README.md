@@ -99,8 +99,8 @@ Must be run on OpenResty server after setup is complete.
     ./scripts/compatibility_test.sh
 
 #### What it does
-- Tests ZooKeeper Kafka versions: 7.0.0, 7.2.0, 7.4.0, 7.5.0, 7.6.0
-- Tests KRaft Kafka versions: 3.7.0, 3.8.0, 3.9.0, 4.0.0, 4.1.0, 4.2.0
+- Tests ZooKeeper Kafka versions(Confluent Platform): 7.0.0, 7.2.0, 7.4.0, 7.5.0, 7.6.0 (Kafka < 3.7.x)
+- Tests KRaft Kafka versions(Apache Kafka): 3.7.0, 3.8.0, 3.9.0, 4.0.0, 4.1.0, 4.2.0
 - Tests both sync and async producers for each version
 - Verifies messages actually land in Kafka via offset check
 - Captures Kafka and OpenResty logs on failure
