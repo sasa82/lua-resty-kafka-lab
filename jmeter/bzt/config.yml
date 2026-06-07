@@ -1,0 +1,10 @@
+settings:
+  env:
+    TARGET_HOST: DOMAIN_NAME
+    TARGET_PORT: 80
+    DURATION: 5m
+    CONCURRENCY: 10
+    RAMP_UP: 30s
+    SYNC_ENDPOINT: /kafka/sync
+    ASYNC_ENDPOINT: /kafka/async
+

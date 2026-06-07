@@ -1,0 +1,22 @@
+execution:
+  - scenario: kafka-sync-100kb
+    concurrency: ${CONCURRENCY}
+    ramp-up: ${RAMP_UP}
+    hold-for: ${DURATION}
+
+scenarios:
+  kafka-sync-100kb:
+    requests:
+      - url: http://${TARGET_HOST}:${TARGET_PORT}${SYNC_ENDPOINT}
+        method: POST
+        headers:
+          Content-Type: application/octet-stream
+          X-Partition-Key: "${__Random(1,100)}"
+        body-file: payloads/payload_100kb.txt
+
+reporting:
+  - module: console
+  - module: final-stats
+    summary: true
+    percentiles: true
+

@@ -1,0 +1,22 @@
+execution:
+  - scenario: kafka-async
+    concurrency: ${CONCURRENCY}
+    ramp-up: ${RAMP_UP}
+    hold-for: ${DURATION}
+
+scenarios:
+  kafka-async:
+    requests:
+      - url: http://${TARGET_HOST}:${TARGET_PORT}${ASYNC_ENDPOINT}
+        method: POST
+        headers:
+          Content-Type: application/json
+          X-Partition-Key: "${__Random(1,100)}"
+        body: '{"source":"bzt-loadtest","mode":"async","ts":"${__time()}","thread":"${__threadNum}"}'
+
+reporting:
+  - module: console
+  - module: final-stats
+    summary: true
+    percentiles: true
+
