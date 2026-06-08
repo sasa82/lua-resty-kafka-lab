@@ -10,20 +10,16 @@ set -e
 # ==========================================
 DOMAIN="resty-kafka.loadtest.rnd"
 OPENRESTY_IP=""
-JMETER_VERSION="5.6.3"
-BZT_VENV="/opt/bzt-venv"
-JMETER_INSTALL_DIR="/opt/jmeter"
 
 # ==========================================
 # Parse arguments
 # ==========================================
-while [[ "$#" -gt 0 ]]; do
-    case $1 in
-        --openresty-server-private-ip) OPENRESTY_IP="$2"; shift ;;
-        --domain) DOMAIN="$2"; shift ;;
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --openresty-server-private-ip) OPENRESTY_IP="$2"; shift 2 ;;
+        --domain) DOMAIN="$2"; shift 2 ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
-    shift
 done
 
 # ==========================================
@@ -40,9 +36,6 @@ echo "lua-resty-kafka-lab JMeter Setup"
 echo "======================================="
 echo "OpenResty IP: $OPENRESTY_IP"
 echo "Domain:       $DOMAIN"
-echo "JMeter:       $JMETER_VERSION"
-echo "BZT venv:     $BZT_VENV"
-echo "JMeter dir:   $JMETER_INSTALL_DIR"
 echo "======================================="
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -67,36 +60,9 @@ apt-get install -y \
     openjdk-17-jre-headless
 
 # ==========================================
-# Install JMeter
-# ==========================================
-if [ ! -d "$JMETER_INSTALL_DIR" ]; then
-    echo "Installing JMeter $JMETER_VERSION..."
-    wget https://downloads.apache.org/jmeter/binaries/apache-jmeter-${JMETER_VERSION}.tgz
-    tar -xzf apache-jmeter-${JMETER_VERSION}.tgz -C /opt/
-    ln -s /opt/apache-jmeter-${JMETER_VERSION} $JMETER_INSTALL_DIR
-    rm apache-jmeter-${JMETER_VERSION}.tgz
-    echo "JMeter installed at: $JMETER_INSTALL_DIR"
-else
-    echo "JMeter already installed at: $JMETER_INSTALL_DIR"
-fi
-
-# ==========================================
-# Add JMeter to PATH
-# ==========================================
-if ! grep -q "jmeter/bin" ~/.bashrc; then
-    echo "export PATH=\$PATH:$JMETER_INSTALL_DIR/bin" >> ~/.bashrc
-fi
-
-# ==========================================
-# Set JMeter JVM heap size
-# ==========================================
-echo "Configuring JMeter JVM heap..."
-sed -i 's/: "${HEAP:="-Xms1g -Xmx1g -XX:MaxMetaspaceSize=256m"}"/: "${HEAP:="-Xms4g -Xmx4g -XX:MaxMetaspaceSize=512m"}"/' \
-    $JMETER_INSTALL_DIR/bin/jmeter
-
-# ==========================================
 # Install BZT in virtualenv
 # ==========================================
+BZT_VENV="/opt/bzt-venv"
 if [ ! -d "$BZT_VENV" ]; then
     echo "Creating BZT virtualenv..."
     python3 -m venv $BZT_VENV
@@ -184,19 +150,22 @@ echo "======================================="
 echo "JMeter setup complete!"
 echo "======================================="
 echo ""
+echo "NOTE: Activate PATH changes first:"
+echo "  source ~/.bashrc"
+echo ""
 echo "Run tests from /opt/bzt-test directory:"
 echo ""
 echo "  cd /opt/bzt-test"
 echo ""
 echo "  # Async test (recommended: 200 concurrency)"
-echo "  bzt config.yml loadtest-async.yml -o settings.env.CONCURRENCY=200"
+echo "  /opt/bzt-venv/bin/bzt config.yml loadtest-async.yml -o settings.env.CONCURRENCY=200"
 echo ""
 echo "  # Sync test (recommended: 100 concurrency)"
-echo "  bzt config.yml loadtest-sync.yml -o settings.env.CONCURRENCY=100"
+echo "  /opt/bzt-venv/bin/bzt config.yml loadtest-sync.yml -o settings.env.CONCURRENCY=100"
 echo ""
 echo "  # Payload size tests"
-echo "  bzt config.yml loadtest-sync-1kb.yml -o settings.env.CONCURRENCY=100"
-echo "  bzt config.yml loadtest-sync-10kb.yml -o settings.env.CONCURRENCY=100"
-echo "  bzt config.yml loadtest-sync-100kb.yml -o settings.env.CONCURRENCY=100"
+echo "  /opt/bzt-venv/bin/bzt config.yml loadtest-sync-1kb.yml -o settings.env.CONCURRENCY=100"
+echo "  /opt/bzt-venv/bin/bzt config.yml loadtest-sync-10kb.yml -o settings.env.CONCURRENCY=100"
+echo "  /opt/bzt-venv/bin/bzt config.yml loadtest-sync-100kb.yml -o settings.env.CONCURRENCY=100"
 echo "======================================="
 
