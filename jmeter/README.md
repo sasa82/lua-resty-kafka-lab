@@ -25,7 +25,6 @@ With custom domain:
 | Software | Version | Location |
 |----------|---------|----------|
 | Java | OpenJDK 17 | system |
-| JMeter | 5.6.3 | /opt/jmeter |
 | BZT | latest | /opt/bzt-venv |
 
 ### System Tuning
@@ -47,11 +46,6 @@ Script automatically applies the following optimizations:
     net.core.rmem_max = 16777216
     net.core.wmem_max = 16777216
 
-#### JMeter JVM Settings
-    -Xms4g -Xmx4g -XX:MaxMetaspaceSize=512m
-
-> Default JMeter heap is 1g (-Xms1g -Xmx1g) which is not enough for high concurrency tests.
-> Script automatically increases heap to 4g and metaspace from 256m to 512m.
 
 ### Running Tests
 
@@ -118,9 +112,4 @@ Compare with BZT final-stats output. Numbers should match exactly.
 
 Should show: 1024 65535
 
-#### JMeter out of memory
-Check heap size:
-    cat /opt/jmeter/bin/jmeter | grep Xms
-
-Should show: -Xms4g -Xmx4g
 
