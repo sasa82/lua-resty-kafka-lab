@@ -123,7 +123,6 @@ test_kafka() {
     # Update docker compose image version
     if [ "$kafka_type" == "zk" ]; then
         sed -i "s|confluentinc/cp-kafka:.*|confluentinc/cp-kafka:${version}|g" "$COMPOSE_FILE"
-        sed -i "s|confluentinc/cp-zookeeper:.*|confluentinc/cp-zookeeper:${version}|g" "$COMPOSE_FILE"
     else
         sed -i "s|apache/kafka:.*|apache/kafka:${version}|g" "$COMPOSE_FILE"
     fi
