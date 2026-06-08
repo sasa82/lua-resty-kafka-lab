@@ -1,13 +1,13 @@
-##!/bin/bash
-## setup_openresty.sh
-## Sets up OpenResty + Kafka environment for lua-resty-kafka-lab
-## Run on OpenResty server
+#!/bin/bash
+# setup_openresty.sh
+# Sets up OpenResty + Kafka environment for lua-resty-kafka-lab
+# Run on OpenResty server
 
 set -e
 
-## ==========================================
-## Default values
-## ==========================================
+# ==========================================
+# Default values
+# ==========================================
 DOMAIN="resty-kafka.loadtest.rnd"
 LIB="patched"
 KAFKA="kraft"
@@ -18,37 +18,36 @@ ASYNC_BATCH_NUM=5000
 ASYNC_FLUSH_TIME=2000
 OPENRESTY_IP=""
 
-## ==========================================
-## Parse arguments
-## ==========================================
-while [[ "$##" -gt 0 ]]; do
-    case $1 in
-        --openresty-server-private-ip) OPENRESTY_IP="$2"; shift ;;
-        --domain) DOMAIN="$2"; shift ;;
-        --lib) LIB="$2"; shift ;;
-        --kafka) KAFKA="$2"; shift ;;
-        --topic) TOPIC="$2"; shift ;;
-        --sync-pool-size) SYNC_POOL_SIZE="$2"; shift ;;
-        --sync-lock-timeout) SYNC_LOCK_TIMEOUT="$2"; shift ;;
-        --async-batch-num) ASYNC_BATCH_NUM="$2"; shift ;;
-        --async-flush-time) ASYNC_FLUSH_TIME="$2"; shift ;;
+# ==========================================
+# Parse arguments
+# ==========================================
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --openresty-server-private-ip) OPENRESTY_IP="$2"; shift 2 ;;
+        --domain) DOMAIN="$2"; shift 2 ;;
+        --lib) LIB="$2"; shift 2 ;;
+        --kafka) KAFKA="$2"; shift 2 ;;
+        --topic) TOPIC="$2"; shift 2 ;;
+        --sync-pool-size) SYNC_POOL_SIZE="$2"; shift 2 ;;
+        --sync-lock-timeout) SYNC_LOCK_TIMEOUT="$2"; shift 2 ;;
+        --async-batch-num) ASYNC_BATCH_NUM="$2"; shift 2 ;;
+        --async-flush-time) ASYNC_FLUSH_TIME="$2"; shift 2 ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
-    shift
 done
 
-## ==========================================
-## Validate required parameters
-## ==========================================
+# ==========================================
+# Validate required parameters
+# ==========================================
 if [ -z "$OPENRESTY_IP" ]; then
     echo "ERROR: --openresty-server-private-ip is required"
     echo "Usage: ./setup_openresty.sh --openresty-server-private-ip 10.0.1.1"
     exit 1
 fi
 
-## ==========================================
-## Set broker port based on kafka type
-## ==========================================
+# ==========================================
+# Set broker port based on kafka type
+# ==========================================
 if [ "$KAFKA" == "kraft" ]; then
     BROKER_PORT=9093
 elif [ "$KAFKA" == "zk" ]; then
@@ -58,9 +57,9 @@ else
     exit 1
 fi
 
-## ==========================================
-## Set lib paths based on lib parameter
-## ==========================================
+# ==========================================
+# Set lib paths based on lib parameter
+# ==========================================
 if [ "$LIB" == "patched" ]; then
     KAFKA_LIB="lua-resty-kafka-patched"
 elif [ "$LIB" == "original" ]; then
@@ -70,11 +69,11 @@ else
     exit 1
 fi
 
-## ==========================================
-## Check/Install OpenResty
-## ==========================================
+# ==========================================
+# Check/Install OpenResty
+# ==========================================
 if command -v openresty &> /dev/null; then
-    OPENRESTY_DIR=$(dirname $(dirname $(which openresty)))
+    OPENRESTY_DIR=$(openresty -V 2>&1 | grep -o '\-\-prefix=[^ ]*' | cut -d= -f2 | xargs dirname)
     echo "OpenResty found at: $OPENRESTY_DIR"
 else
     echo "OpenResty not found, installing..."
@@ -86,14 +85,14 @@ else
         > /etc/apt/sources.list.d/openresty.list
     apt-get update
     apt-get install -y openresty
-
-    OPENRESTY_DIR=$(dirname $(dirname $(which openresty)))
+    
+    OPENRESTY_DIR=$(openresty -V 2>&1 | grep -o '\-\-prefix=[^ ]*' | cut -d= -f2 | xargs dirname)
     echo "OpenResty installed at: $OPENRESTY_DIR"
 fi
 
-## ==========================================
-## Install dependencies
-## ==========================================
+# ==========================================
+# Install dependencies
+# ==========================================
 echo "Installing dependencies..."
 apt-get install -y \
     e2fsprogs \
@@ -102,9 +101,9 @@ apt-get install -y \
     e2fsck-static \
     libext2fs-dev
 
-## ==========================================
-## Set lib paths using OPENRESTY_DIR
-## ==========================================
+# ==========================================
+# Set lib paths using OPENRESTY_DIR
+# ==========================================
 KAFKA_LIB_PATH="$OPENRESTY_DIR/lualib/$KAFKA_LIB/lib/?.lua"
 LAB_LIB_PATH="$OPENRESTY_DIR/lualib/lua-resty-kafka-lab/lib/?.lua"
 
@@ -129,9 +128,9 @@ echo "======================================="
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
-## ==========================================
-## Install Docker if not present
-## ==========================================
+# ==========================================
+# Install Docker if not present
+# ==========================================
 if ! command -v docker &> /dev/null; then
     echo "Installing Docker..."
     curl -fsSL https://get.docker.com | sh
@@ -139,9 +138,9 @@ if ! command -v docker &> /dev/null; then
     systemctl start docker
 fi
 
-## ==========================================
-## Clone kafka libraries if not present
-## ==========================================
+# ==========================================
+# Clone kafka libraries if not present
+# ==========================================
 mkdir -p "$OPENRESTY_DIR/lualib"
 
 if [ ! -d "$OPENRESTY_DIR/lualib/lua-resty-kafka" ]; then
@@ -156,9 +155,9 @@ if [ ! -d "$OPENRESTY_DIR/lualib/lua-resty-kafka-patched" ]; then
         "$OPENRESTY_DIR/lualib/lua-resty-kafka-patched"
 fi
 
-## ==========================================
-## Copy configs to OpenResty
-## ==========================================
+# ==========================================
+# Copy configs to OpenResty
+# ==========================================
 echo "Copying nginx configs..."
 cp "$REPO_DIR/openresty/nginx/conf/nginx.conf" \
     "$OPENRESTY_DIR/nginx/conf/nginx.conf"
@@ -179,12 +178,12 @@ mkdir -p "$OPENRESTY_DIR/lualib/lua-resty-kafka-lab/lib"
 cp "$REPO_DIR/lib/kafka_producers.lua" \
     "$OPENRESTY_DIR/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua"
 
-## ==========================================
-## Replace placeholders in configs
-## ==========================================
+# ==========================================
+# Replace placeholders in configs
+# ==========================================
 echo "Configuring placeholders..."
 
-## nginx.conf
+# nginx.conf
 sed -i "s|KAFKA_LIB_PATH|$KAFKA_LIB_PATH|g" \
     "$OPENRESTY_DIR/nginx/conf/nginx.conf"
 sed -i "s|LAB_LIB_PATH|$LAB_LIB_PATH|g" \
@@ -192,7 +191,7 @@ sed -i "s|LAB_LIB_PATH|$LAB_LIB_PATH|g" \
 sed -i "s|OPENRESTY_DIR|$OPENRESTY_DIR|g" \
     "$OPENRESTY_DIR/nginx/conf/nginx.conf"
 
-## kafka-loadtest.conf
+# kafka-loadtest.conf
 sed -i "s|DOMAIN_NAME|$DOMAIN|g" \
     "$OPENRESTY_DIR/nginx/conf/conf.d/kafka-loadtest.conf"
 sed -i "s|KAFKA_TOPIC|$TOPIC|g" \
@@ -200,7 +199,7 @@ sed -i "s|KAFKA_TOPIC|$TOPIC|g" \
 sed -i "s|OPENRESTY_DIR|$OPENRESTY_DIR|g" \
     "$OPENRESTY_DIR/nginx/conf/conf.d/kafka-loadtest.conf"
 
-## kafka_producers.lua
+# kafka_producers.lua
 sed -i "s|BROKER_IP|$OPENRESTY_IP|g" \
     "$OPENRESTY_DIR/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua"
 sed -i "s|BROKER_PORT|$BROKER_PORT|g" \
@@ -214,26 +213,26 @@ sed -i "s|ASYNC_BATCH_NUM|$ASYNC_BATCH_NUM|g" \
 sed -i "s|ASYNC_FLUSH_TIME|$ASYNC_FLUSH_TIME|g" \
     "$OPENRESTY_DIR/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua"
 
-## compatibility_test.sh
+# compatibility_test.sh
 sed -i "s|DOMAIN_NAME|$DOMAIN|g" \
     "$REPO_DIR/scripts/compatibility_test.sh"
 
-## ==========================================
-## Add domain to /etc/hosts
-## ==========================================
+# ==========================================
+# Add domain to /etc/hosts
+# ==========================================
 echo "Adding domain to /etc/hosts..."
 if grep -q "$DOMAIN" /etc/hosts; then
     sed -i "/$DOMAIN/d" /etc/hosts
 fi
 echo "$OPENRESTY_IP $DOMAIN" >> /etc/hosts
 
-## ==========================================
-## Start Kafka via Docker Compose
-## ==========================================
+# ==========================================
+# Start Kafka via Docker Compose
+# ==========================================
 echo "Starting Kafka..."
 COMPOSE_FILE="$REPO_DIR/docker/docker-compose.yml"
 
-## Backup and replace BROKER_IP in docker-compose.yml
+# Backup and replace BROKER_IP in docker-compose.yml
 cp "$COMPOSE_FILE" "$COMPOSE_FILE.bak"
 sed -i "s|BROKER_IP|$OPENRESTY_IP|g" "$COMPOSE_FILE"
 
@@ -247,9 +246,9 @@ elif [ "$KAFKA" == "zk" ]; then
     sleep 20
 fi
 
-## ==========================================
-## Create Kafka topic
-## ==========================================
+# ==========================================
+# Create Kafka topic
+# ==========================================
 echo "Creating Kafka topic: $TOPIC..."
 if [ "$KAFKA" == "kraft" ]; then
     docker exec test-kafka-kraft /opt/kafka/bin/kafka-topics.sh \
@@ -269,9 +268,9 @@ elif [ "$KAFKA" == "zk" ]; then
         --if-not-exists
 fi
 
-## ==========================================
-## Reload OpenResty
-## ==========================================
+# ==========================================
+# Reload OpenResty
+# ==========================================
 echo "Reloading OpenResty..."
 openresty -s reload
 
