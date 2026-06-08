@@ -1,7 +1,9 @@
 ##!/bin/bash
-## compatibility_test_full.sh
+## compatibility_test.sh
 ## Tests lua-resty-kafka compatibility across different Kafka versions
 ## Run on OpenResty server
+
+set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
@@ -9,6 +11,35 @@ REPO_DIR="$(dirname "$SCRIPT_DIR")"
 RESULTS_FILE="compatibility_results_$(date +%Y%m%d_%H%M%S).log"
 COMPOSE_FILE="$REPO_DIR/docker/docker-compose.yml"
 OPENRESTY_URL="http://DOMAIN_NAME"
+COMPAT_TOPIC="compat-test-topic"
+
+## ==========================================
+## Default values
+## ==========================================
+DOMAIN="DOMAIN_NAME"
+OPENRESTY_IP=""
+LIB="patched"
+
+## ==========================================
+## Parse arguments
+## ==========================================
+while [ "$##" -gt 0 ]; do
+    case "$1" in
+        --openresty-server-private-ip) OPENRESTY_IP="$2"; shift 2 ;;
+        --domain) DOMAIN="$2"; shift 2 ;;
+        --lib) LIB="$2"; shift 2 ;;
+        *) echo "Unknown parameter: $1"; exit 1 ;;
+    esac
+done
+
+## ==========================================
+## Validate required parameters
+## ==========================================
+if [ -z "$OPENRESTY_IP" ]; then
+    echo "ERROR: --openresty-server-private-ip is required"
+    echo "Usage: ./compatibility_test.sh --openresty-server-private-ip 10.0.1.1"
+    exit 1
+fi
 
 ## Colors for terminal output
 GREEN='\033[0;32m'
@@ -41,8 +72,36 @@ log() {
     echo "$msg" >> "$RESULTS_FILE"
 }
 
+## ==========================================
+## Switch kafka config function
+## Just changes port in kafka_producers.lua
+## and reloads OpenResty - no container mgmt
+## ==========================================
+switch_kafka_config() {
+    local kafka_type="$1"  ## zk or kraft
+
+    if [ "$kafka_type" == "zk" ]; then
+        PORT=9092
+    else
+        PORT=9093
+    fi
+
+    log "Switching OpenResty to $kafka_type (port $PORT)..." "$YELLOW"
+
+    ## Update port in kafka_producers.lua
+    sed -i "s|port = [0-9]*|port = $PORT|g" \
+        /usr/local/openresty/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua
+
+    ## Reload OpenResty
+    openresty -s reload
+    sleep 2
+
+    log "OpenResty switched to $kafka_type" "$GREEN"
+}
+
 log "=======================================" "$YELLOW"
 log "Kafka Compatibility Test - $(date)"
+log "Library: $LIB"
 log "Results file: $RESULTS_FILE"
 log "======================================="
 
@@ -51,9 +110,7 @@ test_kafka() {
     local version="$2"
     local port="$3"
     local container="$4"
-    local sync_url="$5"
-    local async_url="$6"
-    local bootstrap="$7"
+    local bootstrap="$5"
 
     log ""
     log "---------------------------------------" "$YELLOW"
@@ -94,12 +151,13 @@ test_kafka() {
     ## Clear OpenResty error log before each test
     > /usr/local/openresty/nginx/logs/error.log
 
-    ## Create test topic
+    ## Create compat test topic with 1 partition
+    log "Creating compat test topic..."
     if [ "$kafka_type" == "zk" ]; then
         docker exec "$container" kafka-topics \
             --bootstrap-server "$bootstrap" \
             --create \
-            --topic test-topic \
+            --topic "$COMPAT_TOPIC" \
             --partitions 1 \
             --replication-factor 1 \
             --if-not-exists 2>/dev/null
@@ -107,13 +165,20 @@ test_kafka() {
         docker exec "$container" /opt/kafka/bin/kafka-topics.sh \
             --bootstrap-server "$bootstrap" \
             --create \
-            --topic test-topic \
+            --topic "$COMPAT_TOPIC" \
             --partitions 1 \
             --replication-factor 1 \
             --if-not-exists 2>/dev/null
     fi
 
     sleep 3
+
+    ## Temporarily update kafka_producers.lua to use compat topic
+    ## by setting nginx variable via conf
+    ## Actually we test via curl with our endpoint which uses ngx.var.kafka_topic
+    ## So we need to update the nginx conf temporarily
+    sed -i "s|set \$kafka_topic \".*\"|set \$kafka_topic \"$COMPAT_TOPIC\"|g" \
+        /usr/local/openresty/nginx/conf/conf.d/kafka-loadtest.conf
 
     ## Reload OpenResty to reinitialize producers
     openresty -s reload
@@ -123,11 +188,11 @@ test_kafka() {
     if [ "$kafka_type" == "zk" ]; then
         offset_before=$(docker exec "$container" kafka-get-offsets \
             --bootstrap-server "$bootstrap" \
-            --topic test-topic 2>/dev/null | grep "test-topic:0:" | cut -d: -f3)
+            --topic "$COMPAT_TOPIC" 2>/dev/null | grep "$COMPAT_TOPIC:0:" | cut -d: -f3)
     else
         offset_before=$(docker exec "$container" /opt/kafka/bin/kafka-get-offsets.sh \
             --bootstrap-server "$bootstrap" \
-            --topic test-topic 2>/dev/null | grep "test-topic:0:" | cut -d: -f3)
+            --topic "$COMPAT_TOPIC" 2>/dev/null | grep "$COMPAT_TOPIC:0:" | cut -d: -f3)
     fi
 
     offset_before=${offset_before:-0}
@@ -135,7 +200,7 @@ test_kafka() {
 
     ## Test SYNC
     log "Testing SYNC..."
-    sync_response=$(curl -s -X POST "$sync_url" \
+    sync_response=$(curl -s -X POST "$OPENRESTY_URL/kafka/sync" \
         -H "Content-Type: application/json" \
         -d '{"source":"compat-test","mode":"sync"}' \
         --max-time 10)
@@ -152,7 +217,7 @@ test_kafka() {
 
     ## Test ASYNC
     log "Testing ASYNC..."
-    async_response=$(curl -s -X POST "$async_url" \
+    async_response=$(curl -s -X POST "$OPENRESTY_URL/kafka/async" \
         -H "Content-Type: application/json" \
         -d '{"source":"compat-test","mode":"async"}' \
         --max-time 10)
@@ -171,11 +236,11 @@ test_kafka() {
     if [ "$kafka_type" == "zk" ]; then
         offset_after=$(docker exec "$container" kafka-get-offsets \
             --bootstrap-server "$bootstrap" \
-            --topic test-topic 2>/dev/null | grep "test-topic:0:" | cut -d: -f3)
+            --topic "$COMPAT_TOPIC" 2>/dev/null | grep "$COMPAT_TOPIC:0:" | cut -d: -f3)
     else
         offset_after=$(docker exec "$container" /opt/kafka/bin/kafka-get-offsets.sh \
             --bootstrap-server "$bootstrap" \
-            --topic test-topic 2>/dev/null | grep "test-topic:0:" | cut -d: -f3)
+            --topic "$COMPAT_TOPIC" 2>/dev/null | grep "$COMPAT_TOPIC:0:" | cut -d: -f3)
     fi
 
     offset_after=${offset_after:-0}
@@ -225,18 +290,32 @@ echo "" >> "$RESULTS_FILE"
 echo "| Type | Version | Sync | Async | Messages | Result |" >> "$RESULTS_FILE"
 echo "|------|---------|------|-------|----------|--------|" >> "$RESULTS_FILE"
 
+## ==========================================
+## Switch to ZooKeeper config
+## ==========================================
+switch_kafka_config "zk"
+
 ## Test ZooKeeper versions
 log ""
 log "=======================================" "$YELLOW"
 log "TESTING ZOOKEEPER KAFKA VERSIONS"
+log "Confluent Platform to Apache Kafka version mapping:"
+log "7.0.x -> Kafka 3.0.x"
+log "7.2.x -> Kafka 3.2.x"
+log "7.4.x -> Kafka 3.4.x"
+log "7.5.x -> Kafka 3.5.x"
+log "7.6.x -> Kafka 3.6.x"
 log "======================================="
 
 for version in "${ZK_VERSIONS[@]}"; do
     test_kafka "zk" "$version" "9092" "test-kafka-zookeeper" \
-        "$OPENRESTY_URL/kafka/sync" \
-        "$OPENRESTY_URL/kafka/async" \
         "kafka-zk:29092"
 done
+
+## ==========================================
+## Switch to KRaft config
+## ==========================================
+switch_kafka_config "kraft"
 
 ## Test KRaft versions
 log ""
@@ -246,8 +325,6 @@ log "======================================="
 
 for version in "${KRAFT_VERSIONS[@]}"; do
     test_kafka "kraft" "$version" "9093" "test-kafka-kraft" \
-        "$OPENRESTY_URL/kafka/sync" \
-        "$OPENRESTY_URL/kafka/async" \
         "kafka-kraft:29093"
 done
 
@@ -257,9 +334,43 @@ log "ALL TESTS COMPLETE"
 log "Results saved to: $RESULTS_FILE"
 log "======================================="
 
+## ==========================================
 ## Restore original docker-compose
+## ==========================================
 cp "$COMPOSE_FILE.bak" "$COMPOSE_FILE"
 log "docker-compose.yml restored to original" "$GREEN"
+
+## ==========================================
+## Restore original topic name in nginx conf
+## ==========================================
+sed -i "s|set \$kafka_topic \".*\"|set \$kafka_topic \"test-topic\"|g" \
+    /usr/local/openresty/nginx/conf/conf.d/kafka-loadtest.conf
+
+## ==========================================
+## Restart both Kafka containers with
+## original versions for load testing
+## ==========================================
+log "Restarting Kafka containers for load testing..." "$YELLOW"
+docker compose -f "$COMPOSE_FILE" up -d kafka-kraft zookeeper kafka-zk
+sleep 20
+
+## ==========================================
+## Switch back to KRaft config (default)
+## ==========================================
+switch_kafka_config "kraft"
+
+## ==========================================
+## Reload OpenResty with restored config
+## ==========================================
+openresty -s reload
+
+log "" 
+log "=======================================" "$GREEN"
+log "Ready for load testing!" "$GREEN"
+log "KRaft Kafka running on port 9093" "$GREEN"
+log "ZooKeeper Kafka running on port 9092" "$GREEN"
+log "Current config: KRaft (default)" "$GREEN"
+log "=======================================" "$GREEN"
 
 ## Print final summary
 echo ""
