@@ -3,8 +3,6 @@
 ## Tests lua-resty-kafka compatibility across different Kafka versions
 ## Run on OpenResty server
 
-set -e
-
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
@@ -47,7 +45,12 @@ RED='\033[0;31m'
 YELLOW='\033[1;33m'
 NC='\033[0m' ## No Color
 
-## Kafka versions to test
+## Confluent Platform to Apache Kafka version mapping:
+## 7.0.x -> Kafka 3.0.x
+## 7.2.x -> Kafka 3.2.x
+## 7.4.x -> Kafka 3.4.x
+## 7.5.x -> Kafka 3.5.x
+## 7.6.x -> Kafka 3.6.x
 ZK_VERSIONS=(
     "7.0.0"
     "7.2.0"
@@ -129,7 +132,7 @@ test_kafka() {
     log "Starting Kafka $kafka_type $version..."
     if [ "$kafka_type" == "zk" ]; then
         docker compose -f "$COMPOSE_FILE" up -d zookeeper kafka-zk
-        sleep 20  ## wait for ZK + Kafka to start
+        sleep 30  ## wait for ZK + Kafka to start
     else
         docker compose -f "$COMPOSE_FILE" up -d kafka-kraft
         sleep 15  ## wait for KRaft to start
@@ -173,10 +176,7 @@ test_kafka() {
 
     sleep 3
 
-    ## Temporarily update kafka_producers.lua to use compat topic
-    ## by setting nginx variable via conf
-    ## Actually we test via curl with our endpoint which uses ngx.var.kafka_topic
-    ## So we need to update the nginx conf temporarily
+    ## Update nginx conf to use compat topic
     sed -i "s|set \$kafka_topic \".*\"|set \$kafka_topic \"$COMPAT_TOPIC\"|g" \
         /usr/local/openresty/nginx/conf/conf.d/kafka-loadtest.conf
 
@@ -233,7 +233,7 @@ test_kafka() {
     sleep 3  ## wait for async flush
 
     ## Get offset after
-    if [ "$kafka_type" == "zk" ]; then
+    if [ "$kafka_type" == "zk" ## ]; then
         offset_after=$(docker exec "$container" kafka-get-offsets \
             --bootstrap-server "$bootstrap" \
             --topic "$COMPAT_TOPIC" 2>/dev/null | grep "$COMPAT_TOPIC:0:" | cut -d: -f3)
@@ -275,11 +275,11 @@ test_kafka() {
     ## Log to results file in table format
     echo "| $kafka_type | $version | $sync_curl_result | $async_curl_result | $offset_diff | $overall |" >> "$RESULTS_FILE"
 
-    ## Stop containers
+    ## Remove containers and volumes to clean up between versions
     if [ "$kafka_type" == "zk" ]; then
-        docker compose -f "$COMPOSE_FILE" stop kafka-zk zookeeper
+        docker compose -f "$COMPOSE_FILE" rm -f -s -v kafka-zk zookeeper
     else
-        docker compose -f "$COMPOSE_FILE" stop kafka-kraft
+        docker compose -f "$COMPOSE_FILE" rm -f -s -v kafka-kraft
     fi
 
     sleep 5
@@ -364,7 +364,7 @@ switch_kafka_config "kraft"
 ## ==========================================
 openresty -s reload
 
-log "" 
+log ""
 log "=======================================" "$GREEN"
 log "Ready for load testing!" "$GREEN"
 log "KRaft Kafka running on port 9093" "$GREEN"
