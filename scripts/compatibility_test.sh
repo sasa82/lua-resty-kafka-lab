@@ -7,14 +7,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
 RESULTS_FILE="compatibility_results_$(date +%Y%m%d_%H%M%S).log"
-COMPOSE_FILE="$REPO_DIR/docker/docker-compose.yml"
-OPENRESTY_URL="http://DOMAIN_NAME"
 COMPAT_TOPIC="compat-test-topic"
+COMPOSE_FILE="$REPO_DIR/docker/docker-compose-compat.yml"
+cp "$REPO_DIR/docker/docker-compose.yml" "$COMPOSE_FILE"
 
 # ==========================================
 # Default values
 # ==========================================
-DOMAIN="DOMAIN_NAME"
+DOMAIN="resty-kafka.loadtest.rnd"
 LIB="patched"
 
 # ==========================================
@@ -27,10 +27,6 @@ while [ "$#" -gt 0 ]; do
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
 done
-
-# ==========================================
-# Validate required parameters
-# ==========================================
 
 # Colors for terminal output
 GREEN='\033[0;32m'
@@ -98,8 +94,19 @@ switch_kafka_config() {
 log "=======================================" "$YELLOW"
 log "Kafka Compatibility Test - $(date)"
 log "Library: $LIB"
+log "Domain: $DOMAIN"
 log "Results file: $RESULTS_FILE"
 log "======================================="
+
+# ==========================================
+# Save current state before tests
+# ==========================================
+SAVED_PORT=$(grep "port = " /usr/local/openresty/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua | grep -o 'port = [0-9]*' | grep -o '[0-9]*')
+SAVED_TOPIC=$(grep "kafka_topic" /usr/local/openresty/nginx/conf/conf.d/kafka-loadtest.conf | grep -o '"[^"]*"' | tr -d '"' | tail -1)
+
+log "Saving current state..." "$YELLOW"
+log "Current port: $SAVED_PORT"
+log "Current topic: $SAVED_TOPIC"
 
 test_kafka() {
     local kafka_type="$1"    # zk or kraft
@@ -124,8 +131,7 @@ test_kafka() {
     log "Starting Kafka $kafka_type $version..."
     if [ "$kafka_type" == "zk" ]; then
         docker compose -f "$COMPOSE_FILE" up -d zookeeper kafka-zk
-        # Wait for ZooKeeper to be ready
-        sleep 30  
+        sleep 30  # wait for ZK + Kafka to start
     else
         docker compose -f "$COMPOSE_FILE" up -d kafka-kraft
         sleep 15  # wait for KRaft to start
@@ -193,7 +199,7 @@ test_kafka() {
 
     # Test SYNC
     log "Testing SYNC..."
-    sync_response=$(curl -s -X POST "$OPENRESTY_URL/kafka/sync" \
+    sync_response=$(curl -s -X POST "http://$DOMAIN/kafka/sync" \
         -H "Content-Type: application/json" \
         -d '{"source":"compat-test","mode":"sync"}' \
         --max-time 10)
@@ -210,7 +216,7 @@ test_kafka() {
 
     # Test ASYNC
     log "Testing ASYNC..."
-    async_response=$(curl -s -X POST "$OPENRESTY_URL/kafka/async" \
+    async_response=$(curl -s -X POST "http://$DOMAIN/kafka/async" \
         -H "Content-Type: application/json" \
         -d '{"source":"compat-test","mode":"async"}' \
         --max-time 10)
@@ -271,10 +277,10 @@ test_kafka() {
     # Remove containers and volumes to clean up between versions
     if [ "$kafka_type" == "zk" ]; then
         docker compose -f "$COMPOSE_FILE" rm -f -s -v kafka-zk zookeeper
-	docker volume prune -f
+        docker volume prune -f
     else
         docker compose -f "$COMPOSE_FILE" rm -f -s -v kafka-kraft
-	docker volume prune -f
+        docker volume prune -f
     fi
 
     sleep 5
@@ -336,35 +342,50 @@ cp "$COMPOSE_FILE.bak" "$COMPOSE_FILE"
 log "docker-compose.yml restored to original" "$GREEN"
 
 # ==========================================
-# Restore original topic name in nginx conf
+# Restore original state
 # ==========================================
-sed -i "s|set \$kafka_topic \".*\"|set \$kafka_topic \"test-topic\"|g" \
+log "Restoring original state..." "$YELLOW"
+
+# Restore topic
+sed -i "s|set \$kafka_topic \".*\"|set \$kafka_topic \"$SAVED_TOPIC\"|g" \
     /usr/local/openresty/nginx/conf/conf.d/kafka-loadtest.conf
 
-# ==========================================
-# Restart both Kafka containers with
-# original versions for load testing
-# ==========================================
-log "Restarting Kafka containers for load testing..." "$YELLOW"
+# Restore port
+sed -i "s|port = [0-9]*|port = $SAVED_PORT|g" \
+    /usr/local/openresty/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua
+
+# Restart both Kafka containers
+log "Restarting Kafka containers..." "$YELLOW"
 docker compose -f "$COMPOSE_FILE" up -d kafka-kraft zookeeper kafka-zk
 sleep 20
 
-# ==========================================
-# Switch back to KRaft config (default)
-# ==========================================
-switch_kafka_config "kraft"
+## Recreate topics on both Kafka instances
+echo "Recreating topics..."
+docker exec test-kafka-kraft /opt/kafka/bin/kafka-topics.sh \
+    --bootstrap-server kafka-kraft:29093 \
+    --create \
+    --topic "$SAVED_TOPIC" \
+    --partitions 4 \
+    --replication-factor 1 \
+    --if-not-exists
 
-# ==========================================
-# Reload OpenResty with restored config
-# ==========================================
+docker exec test-kafka-zookeeper kafka-topics \
+    --bootstrap-server kafka-zk:29092 \
+    --create \
+    --topic "$SAVED_TOPIC" \
+    --partitions 4 \
+    --replication-factor 1 \
+    --if-not-exists
+# Reload OpenResty
 openresty -s reload
+#Remove compat script compose file
+rm -f "$COMPOSE_FILE"
 
 log ""
 log "=======================================" "$GREEN"
-log "Ready for load testing!" "$GREEN"
-log "KRaft Kafka running on port 9093" "$GREEN"
-log "ZooKeeper Kafka running on port 9092" "$GREEN"
-log "Current config: KRaft (default)" "$GREEN"
+log "State restored!" "$GREEN"
+log "Port: $SAVED_PORT" "$GREEN"
+log "Topic: $SAVED_TOPIC" "$GREEN"
 log "=======================================" "$GREEN"
 
 # Print final summary

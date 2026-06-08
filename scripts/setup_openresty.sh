@@ -213,9 +213,6 @@ sed -i "s|ASYNC_BATCH_NUM|$ASYNC_BATCH_NUM|g" \
 sed -i "s|ASYNC_FLUSH_TIME|$ASYNC_FLUSH_TIME|g" \
     "$OPENRESTY_DIR/lualib/lua-resty-kafka-lab/lib/kafka_producers.lua"
 
-# compatibility_test.sh
-sed -i "s|DOMAIN_NAME|$DOMAIN|g" \
-    "$REPO_DIR/scripts/compatibility_test.sh"
 
 # ==========================================
 # Add domain to /etc/hosts
