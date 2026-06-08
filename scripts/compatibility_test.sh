@@ -132,7 +132,17 @@ test_kafka() {
     log "Starting Kafka $kafka_type $version..."
     if [ "$kafka_type" == "zk" ]; then
         docker compose -f "$COMPOSE_FILE" up -d zookeeper kafka-zk
-        sleep 30  # wait for ZK + Kafka to start
+        ## Wait for ZooKeeper to be ready
+        log "Waiting for ZooKeeper to be ready..."
+        for i in $(seq 1 30); do
+            if docker exec test-zookeeper bash -c "echo ruok | nc localhost 2181" 2>/dev/null | grep -q "imok"; then
+                log "ZooKeeper is ready!" "$GREEN"
+                break
+            fi
+            log "Waiting for ZooKeeper... attempt $i/30"
+            sleep 2
+        done
+        sleep 10  ## extra wait for Kafka to connect to ZK
     else
         docker compose -f "$COMPOSE_FILE" up -d kafka-kraft
         sleep 15  # wait for KRaft to start
@@ -233,7 +243,7 @@ test_kafka() {
     sleep 3  # wait for async flush
 
     # Get offset after
-    if [ "$kafka_type" == "zk" # ]; then
+    if [ "$kafka_type" == "zk" ]; then
         offset_after=$(docker exec "$container" kafka-get-offsets \
             --bootstrap-server "$bootstrap" \
             --topic "$COMPAT_TOPIC" 2>/dev/null | grep "$COMPAT_TOPIC:0:" | cut -d: -f3)
@@ -278,8 +288,10 @@ test_kafka() {
     # Remove containers and volumes to clean up between versions
     if [ "$kafka_type" == "zk" ]; then
         docker compose -f "$COMPOSE_FILE" rm -f -s -v kafka-zk zookeeper
+	docker volume prune -f
     else
         docker compose -f "$COMPOSE_FILE" rm -f -s -v kafka-kraft
+	docker volume prune -f
     fi
 
     sleep 5
