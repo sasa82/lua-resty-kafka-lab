@@ -132,17 +132,8 @@ test_kafka() {
     log "Starting Kafka $kafka_type $version..."
     if [ "$kafka_type" == "zk" ]; then
         docker compose -f "$COMPOSE_FILE" up -d zookeeper kafka-zk
-        ## Wait for ZooKeeper to be ready
-        log "Waiting for ZooKeeper to be ready..."
-        for i in $(seq 1 30); do
-            if docker exec test-zookeeper bash -c "echo ruok | nc localhost 2181" 2>/dev/null | grep -q "imok"; then
-                log "ZooKeeper is ready!" "$GREEN"
-                break
-            fi
-            log "Waiting for ZooKeeper... attempt $i/30"
-            sleep 2
-        done
-        sleep 10  ## extra wait for Kafka to connect to ZK
+        # Wait for ZooKeeper to be ready
+        sleep 30  
     else
         docker compose -f "$COMPOSE_FILE" up -d kafka-kraft
         sleep 15  # wait for KRaft to start
