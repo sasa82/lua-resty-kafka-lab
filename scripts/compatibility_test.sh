@@ -15,7 +15,6 @@ COMPAT_TOPIC="compat-test-topic"
 # Default values
 # ==========================================
 DOMAIN="DOMAIN_NAME"
-OPENRESTY_IP=""
 LIB="patched"
 
 # ==========================================
@@ -23,7 +22,6 @@ LIB="patched"
 # ==========================================
 while [ "$#" -gt 0 ]; do
     case "$1" in
-        --openresty-server-private-ip) OPENRESTY_IP="$2"; shift 2 ;;
         --domain) DOMAIN="$2"; shift 2 ;;
         --lib) LIB="$2"; shift 2 ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
@@ -33,11 +31,6 @@ done
 # ==========================================
 # Validate required parameters
 # ==========================================
-if [ -z "$OPENRESTY_IP" ]; then
-    echo "ERROR: --openresty-server-private-ip is required"
-    echo "Usage: ./compatibility_test.sh --openresty-server-private-ip 10.0.1.1"
-    exit 1
-fi
 
 # Colors for terminal output
 GREEN='\033[0;32m'
