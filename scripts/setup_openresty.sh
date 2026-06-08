@@ -236,37 +236,28 @@ COMPOSE_FILE="$REPO_DIR/docker/docker-compose.yml"
 cp "$COMPOSE_FILE" "$COMPOSE_FILE.bak"
 sed -i "s|BROKER_IP|$OPENRESTY_IP|g" "$COMPOSE_FILE"
 
-if [ "$KAFKA" == "kraft" ]; then
-    docker compose -f "$COMPOSE_FILE" up -d kafka-kraft
-    echo "Waiting for KRaft Kafka to start..."
-    sleep 15
-elif [ "$KAFKA" == "zk" ]; then
-    docker compose -f "$COMPOSE_FILE" up -d zookeeper kafka-zk
-    echo "Waiting for ZooKeeper + Kafka to start..."
-    sleep 20
-fi
+docker compose -f "$COMPOSE_FILE" up -d kafka-kraft zookeeper kafka-zk
+echo "Waiting for Kafka containers to start..."
+sleep 20
 
 # ==========================================
 # Create Kafka topic
 # ==========================================
 echo "Creating Kafka topic: $TOPIC..."
-if [ "$KAFKA" == "kraft" ]; then
-    docker exec test-kafka-kraft /opt/kafka/bin/kafka-topics.sh \
-        --bootstrap-server kafka-kraft:29093 \
-        --create \
-        --topic "$TOPIC" \
-        --partitions 1 \
-        --replication-factor 1 \
-        --if-not-exists
-elif [ "$KAFKA" == "zk" ]; then
-    docker exec test-kafka-zookeeper kafka-topics \
-        --bootstrap-server kafka-zk:29092 \
-        --create \
-        --topic "$TOPIC" \
-        --partitions 1 \
-        --replication-factor 1 \
-        --if-not-exists
-fi
+docker exec test-kafka-kraft /opt/kafka/bin/kafka-topics.sh \
+    --bootstrap-server kafka-kraft:29093 \
+    --create \
+    --topic "$TOPIC" \
+    --partitions 4 \
+    --replication-factor 1 \
+    --if-not-exists
+docker exec test-kafka-zookeeper kafka-topics \
+    --bootstrap-server kafka-zk:29092 \
+    --create \
+    --topic "$TOPIC" \
+    --partitions 4 \
+    --replication-factor 1 \
+    --if-not-exists
 
 # ==========================================
 # Reload OpenResty
