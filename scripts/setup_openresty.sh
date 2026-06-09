@@ -121,7 +121,8 @@ EOF
 
     sysctl -p
 fi
-
+## Apply ulimit for current session always
+ulimit -n 65535
 # ==========================================
 # Install dependencies
 # ==========================================
