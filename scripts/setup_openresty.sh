@@ -88,6 +88,38 @@ else
     
     OPENRESTY_DIR=$(openresty -V 2>&1 | grep -o '\-\-prefix=[^ ]*' | cut -d= -f2 | xargs dirname)
     echo "OpenResty installed at: $OPENRESTY_DIR"
+    ## ==========================================
+    ## System tuning - only on fresh install
+    ## ==========================================
+    echo "Tuning system..."
+
+    ## Increase open files limit
+    if ! grep -q "nofile 65535" /etc/security/limits.conf; then
+        cat >> /etc/security/limits.conf << 'EOF'
+* soft nofile 65535
+* hard nofile 65535
+root soft nofile 65535
+root hard nofile 65535
+EOF
+    fi
+
+    ulimit -n 65535
+
+    ## Network tuning
+    if ! grep -q "ip_local_port_range" /etc/sysctl.conf; then
+        cat >> /etc/sysctl.conf << 'EOF'
+## TCP tuning for load testing
+net.ipv4.ip_local_port_range = 1024 65535
+net.ipv4.tcp_tw_reuse = 1
+net.ipv4.tcp_fin_timeout = 15
+net.core.somaxconn = 65535
+net.ipv4.tcp_max_syn_backlog = 65535
+net.core.rmem_max = 16777216
+net.core.wmem_max = 16777216
+EOF
+    fi
+
+    sysctl -p
 fi
 
 # ==========================================
