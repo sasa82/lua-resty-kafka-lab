@@ -12,14 +12,30 @@ This repo contains:
 #### About the patched fork
 - Original library: [lua-resty-kafka](https://github.com/doujiang24/lua-resty-kafka)
 - Patched fork: [lua-resty-kafka-patched](https://github.com/sasa82/lua-resty-kafka)
-- Key improvement: adds Produce API v3+ support enabling KRaft Kafka 4.0+ compatibility
+- Key improvement: adds Produce API v3-v8 support enabling KRaft Kafka 4.0+ compatibility
 - Zero regressions on all previously supported Kafka versions
+
+### Why this patch exists
+
+KRaft Kafka 4.0+ requires Produce API v3+ which uses RecordBatch format.
+Original library uses API version 1 (MessageSet format) which KRaft 4.0+ rejects:
+
+    UnsupportedVersionException: Received request for api with key 0 (Produce)
+    and unsupported version 1
+
+This patched fork fixes this by implementing Produce API v3-v8
+with RecordBatch format and CRC32C checksum.
+
+> To reproduce the error use --lib original --kafka kraft
+> This is expected behavior and demonstrates why the patch is needed
 
 ### Requirements
 
 #### OpenResty Server
 - Ubuntu 20.04+
 - Private network IP (e.g. 10.0.1.1)
+- Minimum 150GB disk space
+  (100KB payload test generates ~2GB per minute of Kafka data)
 
 > OpenResty, Docker and all dependencies are installed automatically by setup_openresty.sh
 
@@ -34,10 +50,15 @@ This repo contains:
 
 #### JMeter Server
 - Ubuntu 20.04+
-- Java 11+
-- BZT/JMeter
+- Minimum 100GB disk space
+
+> Java, BZT and all dependencies are installed automatically by setup_jmeter.sh
 
 ### Quick Start
+
+> Run all scripts as root:
+>     sudo su -
+>     cd lua-resty-kafka-lab
 
 #### OpenResty Server
     ./scripts/setup_openresty.sh --openresty-server-private-ip 10.0.1.1
@@ -80,31 +101,39 @@ Script will automatically:
 
 ### Compatibility Testing
 
-Compatibility matrix script tests all Kafka versions automatically.
+Compatibility matrix script tests current library against all Kafka versions automatically.
 Must be run on OpenResty server after setup is complete.
 
 #### Prerequisites
-- `setup_openresty.sh` must be run first
-- Both ZooKeeper and KRaft containers defined in docker-compose.yml
+- setup_openresty.sh must be run first
 - OpenResty must be running
 
 #### Usage
 
-    ## Test with patched library (default)
+    ## Run on OpenResty server:
+    ./scripts/compatibility_test.sh
+
+#### Testing both libraries
+
+Script tests whichever library was configured by setup_openresty.sh.
+To get results for both libraries run twice:
+
+    ## Test patched lib (default):
     ./scripts/setup_openresty.sh --openresty-server-private-ip 10.0.1.1 --lib patched
     ./scripts/compatibility_test.sh
 
-    ## Test with original library
-    ./scripts/setup_openresty.sh --openresty-server-private-ip 10.0.1.1 --lib original
+    ## Test original lib:
+    ./scripts/setup_openresty.sh --openresty-server-private-ip 10.0.1.1 --lib original --kafka zk
     ./scripts/compatibility_test.sh
 
 #### What it does
-- Tests ZooKeeper Kafka versions(Confluent Platform): 7.0.0, 7.2.0, 7.4.0, 7.5.0, 7.6.0 (Kafka < 3.7.x)
-- Tests KRaft Kafka versions(Apache Kafka): 3.7.0, 3.8.0, 3.9.0, 4.0.0, 4.1.0, 4.2.0
+- Tests ZooKeeper Kafka versions (Confluent Platform): 7.0.0, 7.2.0, 7.4.0, 7.5.0, 7.6.0 (Kafka < 3.7.x)
+- Tests KRaft Kafka versions (Apache Kafka): 3.7.0, 3.8.0, 3.9.0, 4.0.0, 4.1.0, 4.2.0
 - Tests both sync and async producers for each version
 - Verifies messages actually land in Kafka via offset check
 - Captures Kafka and OpenResty logs on failure
 - Saves results to timestamped log file
+- Automatically restores all settings after completion
 
 #### Results
 Results are saved to:
@@ -112,10 +141,9 @@ Results are saved to:
 
 See [results/compatibility_matrix.md](results/compatibility_matrix.md) for our test results.
 
-
 ### Repository Structure
 
-        lua-resty-kafka-lab/
+    lua-resty-kafka-lab/
     ├── README.md
     ├── docker/
     │   └── docker-compose.yml
@@ -144,10 +172,10 @@ See [results/compatibility_matrix.md](results/compatibility_matrix.md) for our t
     │   │       ├── payload_1kb.txt
     │   │       ├── payload_10kb.txt
     │   │       └── payload_100kb.txt
-    │   └── scripts/
-    │       └── setup_jmeter.sh
     ├── scripts/
+    │   ├── README.md
     │   ├── setup_openresty.sh
+    │   ├── setup_jmeter.sh
     │   └── compatibility_test.sh
     └── results/
         ├── compatibility_matrix.md
